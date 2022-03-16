@@ -26,6 +26,7 @@
 3. Make the executable runnable by executing `chmod +x .git/hooks/pre-commit`
 4. Commit away!
 
+
 ## Full environment via docker-compose
 
 Ensure docker and docker-compose are installed.
