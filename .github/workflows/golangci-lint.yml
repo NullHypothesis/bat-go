@@ -6,7 +6,7 @@ on:
     branches:
       - master
       - prod
-      - dev
+#      - dev
   pull_request:
     branches:
       - master
