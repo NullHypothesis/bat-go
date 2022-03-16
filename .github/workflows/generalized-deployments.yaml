@@ -23,4 +23,4 @@ jobs:
       run: echo "GITHUB_REF_OVERRIDE=refs/heads/dev" >> $GITHUB_ENV
       if: ${{ github.ref == 'refs/heads/master' }}
     - name: Generalized Deployments
-      uses: brave-intl/general-docker-build-pipeline-action@e02c52541372ad5f0b7423fec3dc7f1e34b7f084
+      uses: brave-intl/general-docker-build-pipeline-action@v1.0.5
