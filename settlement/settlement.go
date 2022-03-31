@@ -352,7 +352,12 @@ func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wa
 // ConfirmPreparedTransaction confirms a single settlement transaction with uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be submitted in subsequent runs.
-func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
+func ConfirmPreparedTransaction(
+	ctx context.Context,
+	settlementWallet *uphold.Wallet,
+	settlement *Transaction,
+	isResubmit bool,
+) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -378,6 +383,32 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 		if settlement.IsFailed() {
 			logger.Info().Msg(fmt.Sprintf("already failed, skipping confirm for destination %s", settlement.Destination))
 			return nil
+		}
+
+		if isResubmit {
+			// first check if the transaction has already been confirmed
+			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
+			if err == nil {
+				settlement.Status = upholdInfo.Status
+				settlement.Currency = upholdInfo.DestCurrency
+				settlement.Amount = upholdInfo.DestAmount
+				settlement.TransferFee = upholdInfo.TransferFee
+				settlement.ExchangeFee = upholdInfo.ExchangeFee
+
+				if !settlement.IsComplete() {
+					logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
+				}
+
+				break
+
+			} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
+				if time.Now().UTC().After(settlement.ValidUntil) {
+					logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s", settlement.Channel))
+					return nil
+				}
+			}
+		} else {
+			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s", err))
 		}
 
 		var settlementInfo *wallet.TransactionInfo
@@ -428,7 +459,7 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 //   were unable to be confirmed during an initial run can be confirmed in subsequent runs.
 func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []Transaction) error {
 	for i := 0; i < len(settlements); i++ {
-		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i])
+		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i], false)
 		if err != nil {
 			return err
 		}
